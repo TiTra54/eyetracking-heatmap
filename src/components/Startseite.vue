@@ -62,16 +62,23 @@ const mouse = { x: 0, y: 0 }
 // Alle erfassten Punkte mit Zeitstempel
 const allHeatmapPoints = ref([])
 
-// Start- und Endzeitpunkte des Trackings
+// Start und Ende des Trackings
 const trackingStartedAt = ref(null)
 const trackingEndedAt = ref(null)
 
 // Dauer des Trackings in Sekunden (abgeleitet)
-const trackingDuration = computed(() =>
-    trackingStartedAt.value && trackingEndedAt.value
-        ? Math.round((trackingEndedAt.value - trackingStartedAt.value) / 1000)
-        : 0
-)
+const trackingDuration = computed(() => {
+  let dauer = 0;
+
+  if (trackingStartedAt.value && trackingEndedAt.value) {
+    const differenz = trackingEndedAt.value - trackingStartedAt.value;
+    dauer = Math.round(differenz / 1000);
+  } else {
+    dauer = 0;
+  }
+
+  return dauer;
+})
 
 // Aktueller Wert des Zeit-Schiebereglers
 const sliderValue = ref(0)
@@ -105,7 +112,7 @@ function onImageLoad() {
         renderer: 'dom',
     })
 
-    console.log('✅ Heatmap wurde beim Bild-Load initialisiert')
+    console.log('Heatmap wurde beim Bild-Load initialisiert')
 }
 
 // Startet oder stoppt das Tracking
@@ -166,7 +173,7 @@ function updateHeatmapToSlider() {
     heatmapInstance?.setData({ max: 1, data: visiblePoints })
 }
 
-// Wenn der Slider bewegt wird, aktualisiere die sichtbare Heatmap
+// Wenn der Slider bewegt wird, Heatmap aktualisieren
 watch(sliderValue, () => {
     if (!isTracking.value && trackingStartedAt.value) {
         updateHeatmapToSlider()
