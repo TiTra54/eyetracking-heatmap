@@ -4,15 +4,31 @@
             <h1>👁️ Eye-Tracking</h1>
         </header>
 
+        <div class="controls">
+          <label for="trackingMode">Tracking-Modus:</label>
+          <select id="trackingMode" v-model="trackingMode">
+            <option value="mouse">Maus-Tracking</option>
+            <option value="eye">Eye-Tracking</option>
+          </select>
+        </div>
+        <div class="controls">
+          <label for="imageSelect">Bild auswählen:</label>
+          <select id="imageSelect" v-model="selectedImage">
+            <option value="stadt">Stadtbild</option>
+            <option value="ziel">Zielscheibe</option>
+            <option value="fantasy">Fantasy-Welt</option>
+          </select>
+        </div>
+
         <div class="heatmap-wrapper" ref="trackingArea" @mousemove="updateMouse">
             <div class="stacked-container">
-                <img
-                    src="/City.png"
-                    alt="Testbild"
-                    ref="imageRef"
-                    class="background-image"
-                    @load="onImageLoad"
-                />
+              <img
+                  :src="imageSources[selectedImage]"
+                  alt="Content"
+                  ref="imageRef"
+                  class="background-image"
+                  @load="onImageLoad"
+              />
                 <div ref="heatmapContainer" class="heatmap-overlay"></div>
             </div>
         </div>
@@ -66,6 +82,15 @@ const allHeatmapPoints = ref([])
 const trackingStartedAt = ref(null)
 const trackingEndedAt = ref(null)
 
+const trackingMode = ref('mouse') // Standard: Maus-Tracking
+const selectedImage = ref('stadt') // Standardmäßig Stadtbild
+
+const imageSources = {
+  stadt: '/City.png',
+  ziel: '/Zielscheibe.png',
+  fantasy: '/fantasy.png'
+}
+
 // Dauer des Trackings in Sekunden (abgeleitet)
 const trackingDuration = computed(() => {
   let dauer = 0;
@@ -117,28 +142,32 @@ function onImageLoad() {
 
 // Startet oder stoppt das Tracking
 function toggleTracking() {
-    isTracking.value = !isTracking.value
-    if (isTracking.value) {
-        // Tracking starten: Array zurücksetzen, Startzeit setzen
-        allHeatmapPoints.value = []
-        trackingStartedAt.value = Date.now()
+  isTracking.value = !isTracking.value
+  if (isTracking.value) {
+    allHeatmapPoints.value = []
+    trackingStartedAt.value = Date.now()
 
-        // Alle 150ms Mausposition als Punkt speichern
-        intervalId = setInterval(() => {
-            const rect = trackingArea.value.getBoundingClientRect()
-            if (mouse.x >= 0 && mouse.y >= 0 && mouse.x <= rect.width && mouse.y <= rect.height) {
-                const point = { x: mouse.x, y: mouse.y, value: 1, timestamp: Date.now() }
-                heatmapInstance?.addData(point)
-                allHeatmapPoints.value.push(point)
-            }
-        }, 150)
-    } else {
-        // Tracking stoppen
-        clearInterval(intervalId)
-        trackingEndedAt.value = Date.now()
-        sliderValue.value = trackingDuration.value  // Slider auf Maximum setzen
-        updateHeatmapToSlider()  // Heatmap entsprechend anzeigen
+    if (trackingMode.value === 'mouse') {
+      // normales Maus-Tracking starten
+      intervalId = setInterval(() => {
+        const rect = trackingArea.value.getBoundingClientRect()
+        if (mouse.x >= 0 && mouse.y >= 0 && mouse.x <= rect.width && mouse.y <= rect.height) {
+          const point = { x: mouse.x, y: mouse.y, value: 1, timestamp: Date.now() }
+          heatmapInstance?.addData(point)
+          allHeatmapPoints.value.push(point)
+        }
+      }, 150)
+    } else if (trackingMode.value === 'eye') {
+      console.log('👁️ Eye-Tracking wäre hier aktiviert...')
+      // Hier später WebGazer starten
     }
+
+  } else {
+    clearInterval(intervalId)
+    trackingEndedAt.value = Date.now()
+    sliderValue.value = trackingDuration.value
+    updateHeatmapToSlider()
+  }
 }
 
 // Leert die Heatmap und setzt alle Zustände zurück
