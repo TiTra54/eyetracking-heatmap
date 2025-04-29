@@ -60,158 +60,202 @@
 <script setup>
 import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import html2canvas from 'html2canvas'
-const h337 = window.h337  // Zugriff auf heatmap.js über das globale Fensterobjekt
 
-// Reaktiver Zustand für das Tracking
+// Zugriff auf heatmap.js über das globale Fensterobjekt
+const h337 = window.h337
+
+// Zustände für das Tracking
 const isTracking = ref(false)
+const trackingMode = ref('mouse') // Standardmäßig Maus-Tracking
+const selectedImage = ref('stadt') // Standardmäßig Stadtbild
+const sliderValue = ref(0)
+
 let intervalId = null
 let heatmapInstance = null
 
-// Refs auf DOM-Elemente
+// Referenzen auf DOM-Elemente
 const trackingArea = ref(null)
 const heatmapContainer = ref(null)
 const imageRef = ref(null)
 
-// Mauskoordinaten relativ zum Trackingbereich
+// Mausposition innerhalb des Trackingbereichs
 const mouse = { x: 0, y: 0 }
 
-// Alle erfassten Punkte mit Zeitstempel
+// Punkte mit Zeitstempel
 const allHeatmapPoints = ref([])
-
-// Start und Ende des Trackings
 const trackingStartedAt = ref(null)
 const trackingEndedAt = ref(null)
 
-const trackingMode = ref('mouse') // Standard: Maus-Tracking
-const selectedImage = ref('stadt') // Standardmäßig Stadtbild
-
+// Bildquellen für die Auswahl
 const imageSources = {
   stadt: '/City.png',
   ziel: '/Zielscheibe.png',
   fantasy: '/fantasy.png'
 }
 
-// Dauer des Trackings in Sekunden (abgeleitet)
+// Berechnet die Dauer des Trackings in Sekunden
 const trackingDuration = computed(() => {
-  let dauer = 0;
-
   if (trackingStartedAt.value && trackingEndedAt.value) {
-    const differenz = trackingEndedAt.value - trackingStartedAt.value;
-    dauer = Math.round(differenz / 1000);
-  } else {
-    dauer = 0;
+    const differenz = trackingEndedAt.value - trackingStartedAt.value
+    return Math.round(differenz / 1000)
   }
-
-  return dauer;
+  return 0
 })
 
-// Aktueller Wert des Zeit-Schiebereglers
-const sliderValue = ref(0)
-
-// Berechnung der Mausposition relativ zum Container
-function updateMouse(e) {
-    const rect = trackingArea.value.getBoundingClientRect()
-    mouse.x = e.clientX - rect.left
-    mouse.y = e.clientY - rect.top
+// Aktualisiert die Mausposition relativ zum Trackingbereich
+function updateMouse(event) {
+  const area = trackingArea.value.getBoundingClientRect()
+  mouse.x = event.clientX - area.left
+  mouse.y = event.clientY - area.top
 }
 
-// Initialisierung der Heatmap nach dem Laden des Bildes
+// Initialisiert die Heatmap, wenn das Bild geladen wurde
 function onImageLoad() {
-    const heatmap = heatmapContainer.value
-    const image = imageRef.value
+  const heatmap = heatmapContainer.value
+  const image = imageRef.value
 
-    const width = image.clientWidth
-    const height = image.clientHeight
+  const width = image.clientWidth
+  const height = image.clientHeight
 
-    // Heatmap-Größe an Bild anpassen
-    heatmap.style.width = width + 'px'
-    heatmap.style.height = height + 'px'
+  heatmap.style.width = width + 'px'
+  heatmap.style.height = height + 'px'
 
-    // Heatmap erstellen mit Konfiguration
-    heatmapInstance = h337.create({
-        container: heatmap,
-        radius: 30,
-        maxOpacity: 0.6,
-        minOpacity: 0.1,
-        blur: 0.85,
-        renderer: 'dom',
-    })
+  heatmapInstance = h337.create({
+    container: heatmap,
+    radius: 30,
+    maxOpacity: 0.6,
+    minOpacity: 0.1,
+    blur: 0.85,
+    renderer: 'canvas'
+  })
 
-    console.log('Heatmap wurde beim Bild-Load initialisiert')
+  console.log('Heatmap wurde initialisiert')
 }
 
-// Startet oder stoppt das Tracking
+// Schaltet das Tracking ein oder aus (abhängig vom aktuellen Zustand)
 function toggleTracking() {
+  // Zustand umkehren (Start <-> Stop)
   isTracking.value = !isTracking.value
+
   if (isTracking.value) {
-    allHeatmapPoints.value = []
-    trackingStartedAt.value = Date.now()
+    // Wenn Tracking startet:
+    allHeatmapPoints.value = []                // Vorherige Punkte zurücksetzen
+    trackingStartedAt.value = Date.now()       // Startzeit festhalten
 
+    // Je nach Modus das passende Tracking starten
     if (trackingMode.value === 'mouse') {
-      // normales Maus-Tracking starten
-      intervalId = setInterval(() => {
-        const rect = trackingArea.value.getBoundingClientRect()
-        if (mouse.x >= 0 && mouse.y >= 0 && mouse.x <= rect.width && mouse.y <= rect.height) {
-          const point = { x: mouse.x, y: mouse.y, value: 1, timestamp: Date.now() }
-          heatmapInstance?.addData(point)
-          allHeatmapPoints.value.push(point)
-        }
-      }, 150)
+      startMouseTracking()
     } else if (trackingMode.value === 'eye') {
-      console.log('👁️ Eye-Tracking wäre hier aktiviert...')
-      // Hier später WebGazer starten
+      startEyeTracking()
     }
-
   } else {
-    clearInterval(intervalId)
-    trackingEndedAt.value = Date.now()
-    sliderValue.value = trackingDuration.value
+    // Wenn Tracking gestoppt wird:
+    stopTracking()
+  }
+}
+
+// Startet das Maus-Tracking (setzt in regelmäßigen Abständen neue Punkte)
+function startMouseTracking() {
+  intervalId = setInterval(() => {
+    const area = trackingArea.value.getBoundingClientRect()  // Trackingbereich berechnen
+
+    // Prüfen, ob Maus innerhalb des Bereichs ist
+    const innerhalb =
+        mouse.x >= 0 &&
+        mouse.y >= 0 &&
+        mouse.x <= area.width &&
+        mouse.y <= area.height
+
+    // Wenn Maus innerhalb → Punkt zur Heatmap hinzufügen
+    if (innerhalb) {
+      const punkt = {
+        x: mouse.x,
+        y: mouse.y,
+        value: 1,
+        timestamp: Date.now()
+      }
+
+      // Punkt an die Heatmap übergeben
+      heatmapInstance?.addData(punkt)
+
+      // Punkt zusätzlich in Liste speichern (für spätere Auswertung / Export)
+      allHeatmapPoints.value.push(punkt)
+    }
+  }, 150) // Alle 150ms neuer Punkt
+}
+
+function startEyeTracking() {
+  console.log('Eye-Tracking wäre hier aktiv')
+  // WebGazer oder andere Implementierung kann hier später eingebunden werden
+}
+
+function stopTracking() {
+  clearInterval(intervalId)
+  trackingEndedAt.value = Date.now()
+  sliderValue.value = trackingDuration.value
+  updateHeatmapToSlider()
+}
+
+// Leert die Heatmap über den Button
+function clearHeatmap() {
+  resetHeatmap()
+  console.log('Heatmap wurde geleert')
+}
+
+// Setzt die Heatmap und alle zugehörigen Daten zurück
+function resetHeatmap() {
+  if (heatmapInstance) {
+    heatmapInstance.setData({ max: 1, data: [] })
+  }
+  allHeatmapPoints.value = []
+  trackingStartedAt.value = null
+  trackingEndedAt.value = null
+  sliderValue.value = 0
+  console.log('Heatmap und Trackingdaten wurden zurückgesetzt')
+}
+
+// Exportiert die Heatmap inklusive Bild als PNG
+function exportHeatmap() {
+  if (allHeatmapPoints.value.length === 0) {
+    console.warn('Kein Heatmap-Inhalt für den Export vorhanden')
+    return
+  }
+
+  html2canvas(trackingArea.value).then(canvas => {
+    const link = document.createElement('a')
+    link.href = canvas.toDataURL('image/png')
+    link.download = 'heatmap.png'
+    link.click()
+  })
+}
+
+// Zeigt alle Punkte bis zu einem bestimmten Zeitpunkt (Schieberegler)
+function updateHeatmapToSlider() {
+  const cutoff = trackingStartedAt.value + sliderValue.value * 1000
+  const gefiltertePunkte = allHeatmapPoints.value.filter(p => p.timestamp <= cutoff)
+  heatmapInstance?.setData({ max: 1, data: gefiltertePunkte })
+}
+
+// Beobachtet den Schieberegler und aktualisiert die Anzeige
+watch(sliderValue, () => {
+  if (!isTracking.value && trackingStartedAt.value) {
     updateHeatmapToSlider()
   }
-}
-
-// Leert die Heatmap und setzt alle Zustände zurück
-function clearHeatmap() {
-    heatmapInstance?.setData({ max: 1, data: [] }) // Sichtbare Punkte löschen
-    allHeatmapPoints.value = []
-    trackingStartedAt.value = null
-    trackingEndedAt.value = null
-    sliderValue.value = 0
-    console.log('Heatmap geleert & Reset durchgeführt')
-}
-
-// Screenshot der aktuellen Heatmap + Bild exportieren
-function exportHeatmap() {
-    if (allHeatmapPoints.value.length === 0) {
-        console.warn('Kein Heatmap-Inhalt für den Export vorhanden')
-        return
-    }
-
-    html2canvas(trackingArea.value).then(canvas => {
-        const link = document.createElement('a')
-        link.href = canvas.toDataURL('image/png')
-        link.download = 'heatmap.png'
-        link.click()
-    })
-}
-
-// Zeigt nur Punkte an, die zum Zeitpunkt des Sliders passen
-function updateHeatmapToSlider() {
-    const cutoff = trackingStartedAt.value + sliderValue.value * 1000
-    const visiblePoints = allHeatmapPoints.value.filter(p => p.timestamp <= cutoff)
-    heatmapInstance?.setData({ max: 1, data: visiblePoints })
-}
-
-// Wenn der Slider bewegt wird, Heatmap aktualisieren
-watch(sliderValue, () => {
-    if (!isTracking.value && trackingStartedAt.value) {
-        updateHeatmapToSlider()
-    }
 })
 
-// Beim Verlassen der Komponente: Intervall stoppen
+// Beobachtet den Bildwechsel und setzt die Heatmap zurück
+watch(selectedImage, () => {
+  resetHeatmap()
+})
+
+// Beobachtet den Moduswechsel und setzt die Heatmap zurück
+watch(trackingMode, () => {
+  resetHeatmap()
+})
+
+// Stoppt das Intervall beim Verlassen der Komponente
 onBeforeUnmount(() => {
-    clearInterval(intervalId)
+  clearInterval(intervalId)
 })
 </script>
 
@@ -288,7 +332,7 @@ onBeforeUnmount(() => {
 }
 
 .slider-container input[type="range"] {
-    width: 300px;
-    margin-top: 0.5rem;
+  width: 300px;
+  margin-top: 0.5rem;
 }
 </style>
