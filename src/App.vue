@@ -1,9 +1,13 @@
 <script setup>
 import Startseite from './components/Startseite.vue'
+import Test from './components/Test.vue'
+
 </script>
 
 <template>
-    <Startseite />
+    <!--<Startseite />-->
+
+  <Test />
 </template>
 
 <style scoped>

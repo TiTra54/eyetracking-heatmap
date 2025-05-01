@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "heatmap.js": "^2.0.5",
     "html2canvas": "^1.4.1",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "webgazer": "^3.3.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",

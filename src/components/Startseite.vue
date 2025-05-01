@@ -60,6 +60,7 @@
 <script setup>
 import { ref, computed, onBeforeUnmount, watch } from 'vue'
 import html2canvas from 'html2canvas'
+//import 'webgazer';
 
 // Zugriff auf heatmap.js über das globale Fensterobjekt
 const h337 = window.h337
@@ -117,9 +118,18 @@ function onImageLoad() {
   const width = image.clientWidth
   const height = image.clientHeight
 
+  // ⬅️ Heatmap-Container an exakte Bildgröße anpassen
   heatmap.style.width = width + 'px'
   heatmap.style.height = height + 'px'
 
+  // ❗Vorherige Instanz zerstören, wenn vorhanden
+  if (heatmapInstance) {
+    heatmapInstance.setData({ max: 1, data: [] })
+    heatmap.innerHTML = ''
+    heatmapInstance = null
+  }
+
+  // 🔥 Neue Heatmap-Instanz erzeugen
   heatmapInstance = h337.create({
     container: heatmap,
     radius: 30,
@@ -129,7 +139,19 @@ function onImageLoad() {
     renderer: 'canvas'
   })
 
-  console.log('Heatmap wurde initialisiert')
+  console.log('📷 Bild geladen:', width, 'x', height)
+  console.log('🔥 Neue Heatmap initialisiert')
+
+  // 🧪 Debug: Canvas sichtbar?
+  setTimeout(() => {
+    const canvas = heatmap.querySelector('canvas')
+    if (canvas) {
+      console.log('✅ Canvas vorhanden → Größe:', canvas.width, 'x', canvas.height)
+      console.log('✅ Sichtbarkeit: ', getComputedStyle(canvas).display, getComputedStyle(canvas).opacity)
+    } else {
+      console.warn('⚠️ Kein Canvas im DOM gefunden!')
+    }
+  }, 100)
 }
 
 // Schaltet das Tracking ein oder aus (abhängig vom aktuellen Zustand)
@@ -185,15 +207,83 @@ function startMouseTracking() {
 }
 
 function startEyeTracking() {
-  console.log('Eye-Tracking wäre hier aktiv')
-  // WebGazer oder andere Implementierung kann hier später eingebunden werden
+  if (window.webgazer) {
+    window.webgazer
+        .setGazeListener((data, timestamp) => {
+          console.log('👁️ Blickdaten:', data)
+          if (data && isTracking.value) {
+            const rect = trackingArea.value.getBoundingClientRect();
+            const x = data.x - rect.left;
+            const y = data.y - rect.top;
+
+            const innerhalb =
+                x >= 0 &&
+                y >= 0 &&
+                x <= rect.width &&
+                y <= rect.height;
+
+            if (innerhalb) {
+              const punkt = {
+                x: x,
+                y: y,
+                value: 1,
+                timestamp: Date.now()
+              };
+              heatmapInstance?.addData(punkt);
+              allHeatmapPoints.value.push(punkt);
+            }
+          }
+        })
+        .begin()
+        .showVideoPreview(false)
+        .showFaceOverlay(false)
+        .showFaceFeedbackBox(false);
+
+    console.log('WebGazer Eye-Tracking gestartet ✅');
+  } else {
+    console.error('WebGazer nicht verfügbar!');
+  }
+}
+
+function stopEyeTracking() {
+  if (window.webgazer) {
+    window.webgazer.pause();                     // Blickdaten stoppen
+    window.webgazer.end();                       // Kamera & Ressourcen beenden
+    console.log('WebGazer Eye-Tracking vollständig gestoppt ⛔️');
+  }
 }
 
 function stopTracking() {
   clearInterval(intervalId)
+
+  if (trackingMode.value === 'eye') {
+    stopEyeTracking()
+  }
+
   trackingEndedAt.value = Date.now()
   sliderValue.value = trackingDuration.value
-  updateHeatmapToSlider()
+
+  // 🔍 DEBUG: Anzahl Punkte & Inhalte prüfen
+  console.log('🟡 Tracking wurde gestoppt')
+  console.log('🔢 Gesamtpunkte:', allHeatmapPoints.value.length)
+  console.log('⏱️ Trackingdauer:', trackingDuration.value)
+
+  // 🔥 Versuch: Heatmap direkt setzen
+  if (heatmapInstance && allHeatmapPoints.value.length > 0) {
+    const heatmapData = {
+      max: 1,
+      data: allHeatmapPoints.value
+    }
+
+    heatmapInstance.setData(heatmapData)
+    console.log('✅ Heatmap gesetzt (nach Stop)')
+    console.log('📦 Aktuelle Heatmap-Daten:', heatmapInstance.getData())
+  } else {
+    console.warn('❌ HeatmapInstance oder Daten fehlen')
+  }
+
+  // 🚫 Testweise: updateHeatmapToSlider() deaktivieren
+  // updateHeatmapToSlider()
 }
 
 // Leert die Heatmap über den Button
@@ -231,13 +321,29 @@ function exportHeatmap() {
 
 // Zeigt alle Punkte bis zu einem bestimmten Zeitpunkt (Schieberegler)
 function updateHeatmapToSlider() {
-  const cutoff = trackingStartedAt.value + sliderValue.value * 1000
-  const gefiltertePunkte = allHeatmapPoints.value.filter(p => p.timestamp <= cutoff)
-  heatmapInstance?.setData({ max: 1, data: gefiltertePunkte })
+  const cutoff = trackingStartedAt.value + sliderValue.value * 1000;
+  const gefiltertePunkte = allHeatmapPoints.value.filter(p => p.timestamp <= cutoff);
+
+  if (heatmapInstance) {
+    heatmapInstance.setData({ max: 1, data: gefiltertePunkte });
+
+    // 🔍 DEBUG: sicherstellen, dass nach setData auch neu gezeichnet wird
+    setTimeout(() => {
+      const canvas = heatmapContainer.value.querySelector('canvas');
+      if (canvas) {
+        console.log('✅ Canvas-Update sichtbar. Größe:', canvas.width, 'x', canvas.height);
+      } else {
+        console.warn('⚠️ Kein Canvas gefunden!');
+      }
+    }, 50);
+  } else {
+    console.warn('⚠️ Kein Heatmap-Instance beim Update!');
+  }
 }
 
 // Beobachtet den Schieberegler und aktualisiert die Anzeige
 watch(sliderValue, () => {
+  console.log('🎚 Slider bewegt:', sliderValue.value)
   if (!isTracking.value && trackingStartedAt.value) {
     updateHeatmapToSlider()
   }
@@ -307,16 +413,16 @@ onBeforeUnmount(() => {
 }
 
 .heatmap-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 2;
-    width: 100%;
-    height: auto;
-    pointer-events: none;
-    will-change: transform, opacity;
-    contain: strict;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%; /* ✅ Wichtig */
+  pointer-events: none;
+  background-color: rgba(255, 0, 0, 0.03); /* leichte Sichtbarkeit zur Kontrolle */
 }
+
 
 .buttons {
     display: flex;
