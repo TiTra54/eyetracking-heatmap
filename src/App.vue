@@ -1,13 +1,13 @@
 <script setup>
 import Startseite from './components/Startseite.vue'
-import EyeTracking from './components/EyeTracking.vue'
+import EyeTrackingApp from './components/EyeTrackingApp.vue'
 
 </script>
 
 <template>
     <!--<Startseite />-->
 
-  <EyeTracking />
+  <EyeTrackingApp />
 </template>
 
 <style scoped>
