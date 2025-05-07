@@ -10,6 +10,7 @@
           :src="selectedImage"
           class="background-image"
           alt="Tracking-Bild"
+          ref="uploadedImage"
       />
       <div class="heatmap-overlay" ref="heatmapContainer">
         <!-- Kalibrierungspunkte -->
@@ -27,12 +28,18 @@
     </div>
 
     <div class="buttons">
-      <select v-model="selectedImage" class="image-select">
-        <option value="">Kein Bild</option>
-        <option value="/City.png">City</option>
-        <option value="/Zielscheibe.png">Zielscheibe</option>
-        <option value="/fantasy.png">Fantasy</option>
-      </select>
+      <label v-if="!selectedImage" class="custom-file-upload">
+        📁 Bild auswählen
+        <input
+            type="file"
+            accept="image/*"
+            @change="handleImageUpload"
+            hidden
+        />
+      </label>
+      <button v-else @click="removeImage" class="custom-file-upload">
+        🗑️ Bild löschen
+      </button>
       <button @click="toggleTracking">
         {{ isTracking ? 'Stop Tracking' : 'Start Tracking' }}
       </button>
@@ -50,35 +57,43 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import * as XLSX from 'xlsx'
 import html2canvas from 'html2canvas'
 
+// Heatmap-Objekt von heatmap.js
 const h337 = window.h337
+
+// Refs für DOM-Elemente
 const trackingArea = ref(null)
 const heatmapContainer = ref(null)
-let heatmapInstance = null
+const uploadedImage = ref(null)
 
-const isTracking = ref(false)
-const allPoints = ref([])
-const selectedImage = ref('')
-const exportFormat = ref('')
+// Zustand des Trackings
+const isTracking = ref(false)                  // Gibt an, ob das Eye-Tracking gerade läuft
+const allPoints = ref([])                      // Gesammelte Blickpunkte (für Export etc.)
+const selectedImage = ref('')                  // Aktuell ausgewähltes bzw. hochgeladenes Bild
+const exportFormat = ref('')                   // Aktuelles Exportformat (png, json, xlsx)
 
-// Kalibrierung
-const isCalibrating = ref(false)
-const calibrationPoints = ref([])
-const currentCalibrationStep = ref(0)
+// Kalibrierung: Vorbereitung und Ablaufsteuerung
+const isCalibrating = ref(false)               // Gibt an, ob aktuell kalibriert wird
+const calibrationPoints = ref([])              // Array mit allen Kalibrierungspunkten
+const currentCalibrationStep = ref(0)          // Aktueller Schritt der Kalibrierung
 
+let heatmapInstance = null                     // Heatmap-Instanz
+
+// Initialisiert die Heatmap mit Standardgröße (z. B. wenn kein Bild aktiv ist)
 function initHeatmap() {
   const width = 800
   const height = 600
 
-  const container = heatmapContainer.value
-  container.style.width = width + 'px'
-  container.style.height = height + 'px'
+  trackingArea.value.style.width = width + 'px'
+  trackingArea.value.style.height = height + 'px'
+  heatmapContainer.value.style.width = width + 'px'
+  heatmapContainer.value.style.height = height + 'px'
 
   heatmapInstance = h337.create({
-    container,
+    container: heatmapContainer.value,
     radius: 30,
     maxOpacity: 0.6,
     minOpacity: 0.1,
@@ -86,9 +101,33 @@ function initHeatmap() {
     renderer: 'canvas',
   })
 
-  console.log('🔥 Heatmap initialisiert')
+  console.log('Heatmap initialisiert mit Standardgröße')
 }
 
+// Liest Bilddatei ein und setzt sie als Hintergrundbild
+function handleImageUpload(event) {
+  const file = event.target.files[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = e => {
+    selectedImage.value = e.target.result
+    console.log('Benutzerbild geladen')
+  }
+  reader.readAsDataURL(file)
+}
+
+// Entfernt das aktuelle Bild und setzt Heatmap zurück
+function removeImage() {
+  selectedImage.value = ''
+  allPoints.value = []
+  if (heatmapInstance) {
+    heatmapInstance.setData({ max: 1, data: [] })
+  }
+  console.log('Bild entfernt, Heatmap geleert')
+}
+
+// Startet oder stoppt das Tracking je nach Zustand
 function toggleTracking() {
   if (isTracking.value) {
     stopEyeTracking()
@@ -97,9 +136,10 @@ function toggleTracking() {
   }
 }
 
+// Initialisiert WebGazer und beginnt die Kalibrierung
 function startWebGazerAndCalibrate() {
   if (!window.webgazer) {
-    console.error('❌ WebGazer nicht geladen')
+    console.error('WebGazer nicht geladen')
     return
   }
 
@@ -108,11 +148,12 @@ function startWebGazerAndCalibrate() {
       .showFaceFeedbackBox(false)
       .begin()
       .then(() => {
-        console.log('📷 Kamera bereit, Kalibrierung startet')
+        console.log('Kamera bereit, Kalibrierung startet')
         startCalibration()
       })
 }
 
+// Generiert 9 Kalibrierungspunkte im Trackingbereich
 function startCalibration() {
   const area = trackingArea.value.getBoundingClientRect()
   const padding = 50
@@ -133,6 +174,7 @@ function startCalibration() {
   isCalibrating.value = true
 }
 
+// Verarbeitet Klick auf Kalibrierungspunkt
 function handleCalibrationClick(index) {
   if (index !== currentCalibrationStep.value) return
   currentCalibrationStep.value++
@@ -143,6 +185,7 @@ function handleCalibrationClick(index) {
   }
 }
 
+// Startet GazeListener und sammelt Blickdaten
 function startEyeTrackingAfterCalibration() {
   isTracking.value = true
 
@@ -160,27 +203,26 @@ function startEyeTrackingAfterCalibration() {
     }
   })
 
-  console.log('🟢 Eye-Tracking gestartet')
+  console.log('Eye-Tracking gestartet')
 }
 
+// Stoppt WebGazer, Tracking bleibt sichtbar
 function stopEyeTracking() {
   isTracking.value = false
-
   if (window.webgazer) {
     window.webgazer.pause()
-    console.log('🛑 Eye-Tracking gestoppt')
+    console.log('Eye-Tracking gestoppt')
   }
-
-  // Kein setData() aufrufen → Heatmap bleibt einfach sichtbar!
-  console.log('ℹ️ Tracking gestoppt – Heatmap bleibt erhalten')
 }
 
+// Leert Heatmap-Daten
 function clearHeatmap() {
   allPoints.value = []
   heatmapInstance.setData({ max: 1, data: [] })
-  console.log('🧹 Heatmap geleert')
+  console.log('Heatmap geleert')
 }
 
+// Export-Logik
 function handleExport() {
   if (exportFormat.value === 'png') {
     exportAsPNG()
@@ -192,21 +234,21 @@ function handleExport() {
   exportFormat.value = ''
 }
 
+// Exportiert sichtbaren Bereich als PNG
 function exportAsPNG() {
   if (!trackingArea.value) return
-
   html2canvas(trackingArea.value).then(canvas => {
     const link = document.createElement('a')
     link.href = canvas.toDataURL('image/png')
     link.download = 'heatmap-export.png'
     link.click()
-    console.log('📦 PNG exportiert')
+    console.log('PNG exportiert')
   })
 }
 
+// Exportiert Gaze-Daten als JSON mit normalisierten Koordinaten
 function exportAsJSON() {
   const area = trackingArea.value.getBoundingClientRect()
-
   const data = allPoints.value.map(p => ({
     content: selectedImage.value || 'Kein Bild',
     x: p.x,
@@ -215,22 +257,19 @@ function exportAsJSON() {
     y_norm: (p.y / area.height).toFixed(4),
     timestamp: new Date(p.timestamp).toISOString(),
   }))
-
   const json = JSON.stringify(data, null, 2)
-  const blob = new Blob([json], { type: "application/json" })
+  const blob = new Blob([json], { type: 'application/json' })
   const url = URL.createObjectURL(blob)
-
-  const link = document.createElement("a")
+  const link = document.createElement('a')
   link.href = url
-  link.download = "blickdaten.json"
+  link.download = 'blickdaten.json'
   link.click()
-
-  console.log("📄 JSON mit normierten Daten exportiert")
+  console.log('JSON exportiert')
 }
 
+// Exportiert Gaze-Daten als Excel (.xlsx)
 function exportAsExcel() {
   const area = trackingArea.value.getBoundingClientRect()
-
   const data = allPoints.value.map(p => ({
     content: selectedImage.value || 'Kein Bild',
     x: p.x,
@@ -239,24 +278,54 @@ function exportAsExcel() {
     y_norm: (p.y / area.height).toFixed(4),
     timestamp: new Date(p.timestamp).toISOString(),
   }))
-
   const worksheet = XLSX.utils.json_to_sheet(data)
   const workbook = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(workbook, worksheet, 'GazeData')
-
   const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' })
   const blob = new Blob([excelBuffer], { type: 'application/octet-stream' })
-
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
   link.download = 'blickdaten.xlsx'
   link.click()
-
-  console.log('📊 Excel-Datei mit normierten Daten exportiert')
+  console.log('Excel exportiert')
 }
 
+// Initialisiert Standard-Heatmap beim Laden der Seite
 onMounted(() => {
   initHeatmap()
+})
+
+// Reagiert auf neue Bildauswahl: Größe auslesen und Heatmap anpassen
+watch(selectedImage, () => {
+  if (!selectedImage.value) {
+    initHeatmap()
+    return
+  }
+
+  const img = uploadedImage.value
+  if (!img) return
+
+  img.onload = () => {
+    const width = img.offsetWidth
+    const height = img.offsetHeight
+    trackingArea.value.style.width = width + 'px'
+    trackingArea.value.style.height = height + 'px'
+    heatmapContainer.value.style.width = width + 'px'
+    heatmapContainer.value.style.height = height + 'px'
+    heatmapInstance = h337.create({
+      container: heatmapContainer.value,
+      radius: 30,
+      maxOpacity: 0.6,
+      minOpacity: 0.1,
+      blur: 0.85,
+      renderer: 'canvas',
+    })
+    console.log(`Heatmap angepasst auf: ${width} x ${height}`)
+  }
+
+  if (img.complete) {
+    img.onload()
+  }
 })
 </script>
 
@@ -287,41 +356,24 @@ onMounted(() => {
   z-index: 1000;
 }
 
-/* Desktop-specific styles */
-@media only screen and (min-width: 1025px) {
-  .heatmap-area {
-    width: 90%;
-    max-width: 1200px;
-    height: 75vh;
-    min-height: 600px;
-  }
-
-  .background-image {
-    object-fit: cover; /* Changed from contain to cover for better expansion */
-  }
-
-  .buttons {
-    max-width: 1200px;
-    gap: 1.5rem;
-  }
-
-  .buttons button {
-    font-size: 1.1rem;
-    padding: 0.8rem 1.5rem;
-  }
-}
-
-/* Default styles (for tablets and below) */
+/* Haupt-Trackingbereich */
 .heatmap-area {
-  width: 100%;
-  max-width: 800px;
-  height: 60vh;
-  min-height: 400px;
+  width: auto;
+  max-width: none;
+  height: auto;
+  min-height: 0;
+  display: inline-block;
   position: relative;
   border: 2px dashed red;
-  margin-top: 60px;
+  margin-top: 30px;
   margin-bottom: 1.5rem;
   background-color: #fbfffb;
+}
+
+/* Fallback-Größe wenn kein Bild */
+.heatmap-area:empty {
+  width: 800px;
+  height: 600px;
 }
 
 .heatmap-overlay {
@@ -368,6 +420,7 @@ onMounted(() => {
   background-color: rgba(0, 200, 0, 0.7); /* grün (nach Klick) */
   transform: translate(-50%, -50%) scale(1.1);
 }
+
 .image-select {
   margin: 1rem 0;
   padding: 0.5rem;
@@ -386,7 +439,8 @@ onMounted(() => {
   max-width: 800px;
 }
 
-.buttons button, .export-menu select {
+.buttons button,
+.export-menu select {
   padding: 0.6rem 1rem;
   font-size: 0.9rem;
   min-width: 120px;
@@ -399,28 +453,25 @@ onMounted(() => {
   max-width: 200px;
 }
 
-/* iPad specific adjustments */
-@media only screen and (min-width: 768px) and (max-width: 1024px) {
-  .heatmap-area {
-    height: 70vh;
-    max-height: 700px;
-  }
+.custom-file-upload {
+  display: inline-block;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  background-color: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  text-align: center;
+  transition: background-color 0.2s;
+}
 
-  .buttons {
-    gap: 1.2rem;
-  }
-
-  .buttons button {
-    font-size: 1rem;
-    padding: 0.8rem 1.2rem;
-  }
+.custom-file-upload:hover {
+  background-color: #e0e0e0;
 }
 
 /* iPhone specific adjustments */
 @media only screen and (max-width: 767px) {
   .heatmap-area {
-    height: 55vh;
-    min-height: 350px;
     margin-top: 55px;
   }
 
@@ -442,26 +493,6 @@ onMounted(() => {
   .calibration-point {
     width: 25px;
     height: 25px;
-  }
-}
-
-/* Landscape orientation adjustments */
-@media only screen and (max-width: 1024px) and (orientation: landscape) {
-  .heatmap-area {
-    height: 75vh;
-    min-height: 300px;
-  }
-
-  .buttons {
-    flex-direction: row;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 0.5rem;
-    justify-content: flex-start;
-  }
-
-  .buttons > * {
-    flex-shrink: 0;
   }
 }
 </style>
