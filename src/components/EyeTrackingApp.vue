@@ -80,7 +80,7 @@ const isCalibrating = ref(false)               // Gibt an, ob aktuell kalibriert
 const calibrationPoints = ref([])              // Array mit allen Kalibrierungspunkten
 const currentCalibrationStep = ref(0)          // Aktueller Schritt der Kalibrierung
 
-let heatmapInstance = null                     // Heatmap-Instanz
+let heatmapInstance = null                           // Heatmap-Instanz
 
 // Initialisiert die Heatmap mit Standardgröße (z. B. wenn kein Bild aktiv ist)
 function initHeatmap() {
@@ -283,7 +283,7 @@ function exportAsPNG() {
 function exportAsJSON() {
   const area = trackingArea.value.getBoundingClientRect()
   const data = allPoints.value.map(p => ({
-    content: selectedImage.value || 'Kein Bild',
+    //content: selectedImage.value || 'Kein Bild',
     x: p.x,
     y: p.y,
     x_norm: (p.x / area.width).toFixed(4),
@@ -304,7 +304,7 @@ function exportAsJSON() {
 function exportAsExcel() {
   const area = trackingArea.value.getBoundingClientRect()
   const data = allPoints.value.map(p => ({
-    content: selectedImage.value || 'Kein Bild',
+    //content: selectedImage.value || 'Kein Bild',
     x: p.x,
     y: p.y,
     x_norm: (p.x / area.width).toFixed(4),
