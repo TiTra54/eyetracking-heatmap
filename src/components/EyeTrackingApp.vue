@@ -117,6 +117,39 @@ function handleImageUpload(event) {
   reader.readAsDataURL(file)
 }
 
+// Reagiert auf neue Bildauswahl: Größe auslesen und Heatmap anpassen
+watch(selectedImage, () => {
+  if (!selectedImage.value) {
+    initHeatmap()
+    return
+  }
+
+  const img = uploadedImage.value
+  if (!img) return
+
+  img.onload = () => {
+    const width = img.offsetWidth
+    const height = img.offsetHeight
+    trackingArea.value.style.width = width + 'px'
+    trackingArea.value.style.height = height + 'px'
+    heatmapContainer.value.style.width = width + 'px'
+    heatmapContainer.value.style.height = height + 'px'
+    heatmapInstance = h337.create({
+      container: heatmapContainer.value,
+      radius: 30,
+      maxOpacity: 0.6,
+      minOpacity: 0.1,
+      blur: 0.85,
+      renderer: 'canvas',
+    })
+    console.log(`Heatmap angepasst auf: ${width} x ${height}`)
+  }
+
+  if (img.complete) {
+    img.onload()
+  }
+})
+
 // Entfernt das aktuelle Bild und setzt Heatmap zurück
 function removeImage() {
   selectedImage.value = ''
@@ -295,38 +328,7 @@ onMounted(() => {
   initHeatmap()
 })
 
-// Reagiert auf neue Bildauswahl: Größe auslesen und Heatmap anpassen
-watch(selectedImage, () => {
-  if (!selectedImage.value) {
-    initHeatmap()
-    return
-  }
 
-  const img = uploadedImage.value
-  if (!img) return
-
-  img.onload = () => {
-    const width = img.offsetWidth
-    const height = img.offsetHeight
-    trackingArea.value.style.width = width + 'px'
-    trackingArea.value.style.height = height + 'px'
-    heatmapContainer.value.style.width = width + 'px'
-    heatmapContainer.value.style.height = height + 'px'
-    heatmapInstance = h337.create({
-      container: heatmapContainer.value,
-      radius: 30,
-      maxOpacity: 0.6,
-      minOpacity: 0.1,
-      blur: 0.85,
-      renderer: 'canvas',
-    })
-    console.log(`Heatmap angepasst auf: ${width} x ${height}`)
-  }
-
-  if (img.complete) {
-    img.onload()
-  }
-})
 </script>
 
 <style scoped>
@@ -337,7 +339,6 @@ watch(selectedImage, () => {
   padding: 1rem;
   box-sizing: border-box;
   width: 100%;
-  max-width: 100vw;
   overflow-x: hidden;
 }
 
@@ -356,24 +357,14 @@ watch(selectedImage, () => {
   z-index: 1000;
 }
 
-/* Haupt-Trackingbereich */
 .heatmap-area {
-  width: auto;
-  max-width: none;
-  height: auto;
-  min-height: 0;
-  display: inline-block;
-  position: relative;
-  border: 2px dashed red;
-  margin-top: 30px;
-  margin-bottom: 1.5rem;
-  background-color: #fbfffb;
-}
-
-/* Fallback-Größe wenn kein Bild */
-.heatmap-area:empty {
   width: 800px;
   height: 600px;
+  position: relative;
+  border: 2px dashed red;
+  margin-top: 60px;
+  margin-bottom: 1.5rem;
+  background-color: #fbfffb;
 }
 
 .heatmap-overlay {
@@ -417,16 +408,8 @@ watch(selectedImage, () => {
   transition: opacity 0.3s ease;
 }
 .calibration-point.clicked {
-  background-color: rgba(0, 200, 0, 0.7); /* grün (nach Klick) */
+  background-color: rgba(0, 200, 0, 0.7);
   transform: translate(-50%, -50%) scale(1.1);
-}
-
-.image-select {
-  margin: 1rem 0;
-  padding: 0.5rem;
-  font-size: 1rem;
-  width: 90%;
-  max-width: 300px;
 }
 
 .buttons {
@@ -464,35 +447,7 @@ watch(selectedImage, () => {
   text-align: center;
   transition: background-color 0.2s;
 }
-
 .custom-file-upload:hover {
   background-color: #e0e0e0;
-}
-
-/* iPhone specific adjustments */
-@media only screen and (max-width: 767px) {
-  .heatmap-area {
-    margin-top: 55px;
-  }
-
-  .buttons {
-    gap: 0.6rem;
-    padding: 0.3rem;
-  }
-
-  .buttons button {
-    font-size: 0.85rem;
-    padding: 0.5rem 0.8rem;
-    min-width: 100px;
-  }
-
-  .export-menu select {
-    font-size: 0.85rem;
-  }
-
-  .calibration-point {
-    width: 25px;
-    height: 25px;
-  }
 }
 </style>
