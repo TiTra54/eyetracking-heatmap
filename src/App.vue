@@ -1,12 +1,8 @@
 <script setup>
-import Startseite from './components/Startseite.vue'
 import EyeTrackingApp from './components/EyeTrackingApp.vue'
-
 </script>
 
 <template>
-    <!--<Startseite />-->
-
   <EyeTrackingApp />
 </template>
 

@@ -104,7 +104,7 @@ function initHeatmap() {
   console.log('Heatmap initialisiert mit Standardgröße')
 }
 
-// Liest Bilddatei ein und setzt sie als Hintergrundbild
+// Liest Bilddatei ein und setzt sie als Background
 function handleImageUpload(event) {
   const file = event.target.files[0]
   if (!file) return
