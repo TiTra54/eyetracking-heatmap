@@ -26,7 +26,6 @@
         </div>
       </div>
     </div>
-
     <div class="buttons">
       <label v-if="!selectedImage" class="custom-file-upload">
         📁 Bild auswählen
